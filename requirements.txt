@@ -1,0 +1,12 @@
+# requirements for demo_neuronai_bot
+# Telegram bot framework (aiogram) and ORM (SQLAlchemy)
+aiogram>=3.0
+SQLAlchemy>=1.4
+
+# Optional async DB drivers (uncomment one if you use it):
+# aiosqlite>=0.17
+# asyncpg>=0.27
+
+# Helpful utilities
+python-dotenv>=1.0
+
