@@ -2,6 +2,7 @@
 # Telegram bot framework (aiogram) and ORM (SQLAlchemy)
 aiogram>=3.0
 SQLAlchemy>=1.4
+psycopg2-binary>=2.9
 
 # Optional async DB drivers (uncomment one if you use it):
 # aiosqlite>=0.17
