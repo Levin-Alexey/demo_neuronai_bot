@@ -11,3 +11,8 @@ psycopg2-binary>=2.9
 # Helpful utilities
 python-dotenv>=1.0
 
+# Video processing
+moviepy>=1.0.3
+
+# HTTP client for n8n webhook
+httpx>=0.24
