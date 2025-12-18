@@ -357,7 +357,6 @@ async def _process_n8n_response(
 
         await message.answer(
             "✅ <b>Собеседование завершено!</b>\n\n"
-            f"{result}\n\n"
             "Спасибо за уделённое время! 🙏",
             parse_mode="HTML",
             reply_markup=get_main_keyboard(),
