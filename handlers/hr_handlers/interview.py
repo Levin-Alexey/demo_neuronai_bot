@@ -23,10 +23,7 @@ router = Router()
 
 # ==================== Конфигурация ====================
 
-N8N_WEBHOOK_URL = os.getenv(
-    "N8N_INTERVIEW_WEBHOOK_URL",
-    "https://levinbiz.app.n8n.cloud/webhook/interview",
-)
+N8N_WEBHOOK_URL = "https://levinbiz.app.n8n.cloud/webhook/interview"
 
 HTTP_TIMEOUT = 60.0  # Whisper + LLM могут работать долго
 N8N_RETRY_ATTEMPTS = 40  # ~120 сек при интервале 3 сек
@@ -34,25 +31,36 @@ N8N_RETRY_INTERVAL = 3.0  # сек
 
 
 # ==================== Состояние сессий ====================
-# Простой in-memory трекер активных собеседований
-# В продакшне лучше проверять через БД, но для демо — ок
+# Используем БД для надёжного хранилища (переживает перезапуски бота)
 
-_active_sessions: set[int] = set()
+from models import (
+    get_session,
+    get_active_interview,
+    start_interview,
+    cancel_interview,
+    save_answer_1,
+    save_answer_2,
+    save_answer_3_and_complete,
+)
 
 
 def is_in_interview(telegram_id: int) -> bool:
     """Проверить, проходит ли пользователь собеседование."""
-    return telegram_id in _active_sessions
+    with get_session() as session:
+        interview = get_active_interview(session, telegram_id)
+        return interview is not None and interview.is_active
 
 
-def start_session(telegram_id: int) -> None:
-    """Отметить начало собеседования."""
-    _active_sessions.add(telegram_id)
+def start_session(telegram_id: int, first_question: str) -> None:
+    """Отметить начало собеседования в БД."""
+    with get_session() as session:
+        start_interview(session, telegram_id, first_question)
 
 
 def end_session(telegram_id: int) -> None:
-    """Отметить завершение собеседования."""
-    _active_sessions.discard(telegram_id)
+    """Отметить завершение/отмену собеседования в БД."""
+    with get_session() as session:
+        cancel_interview(session, telegram_id)
 
 
 # ==================== HTTP клиент для n8n ====================
@@ -210,10 +218,9 @@ async def handle_start_interview(message: types.Message) -> None:
         )
         return
 
-    # Успех — начинаем сессию
-    start_session(telegram_id)
-
+    # Успех — начинаем сессию в БД
     question = data.get("question", "Расскажите о себе и вашем опыте в продажах.")
+    start_session(telegram_id, question)
 
     await message.answer(
         "🎤 <b>Собеседование на позицию «Менеджер по продажам»</b>\n\n"
@@ -302,6 +309,24 @@ async def handle_text_answer(message: types.Message) -> None:
     telegram_id = user.id
     text = (message.text or "").strip()
 
+    # Не отправляем в n8n кнопки меню
+    menu_buttons = {
+        "📄 Анализ резюме (CV Scan)",
+        "🔥 Быстрый подбор",
+        "⚙️ Информация для HR",
+        "🔙 Назад в меню",
+        "🤝 HR и найм",
+        "👷‍♂️ Охрана труда",
+        "🛠 IT HelpDesk",
+        "🧠 База Знаний",
+        "💰 AI-Менеджер",
+        "🎭 Пройти собеседование",
+        "❌ Отмена",
+        "◀️ Назад",
+    }
+    if text in menu_buttons:
+        return
+
     # Проверяем, что пользователь в режиме собеседования
     if not is_in_interview(telegram_id):
         return  # Игнорируем текст вне собеседования
@@ -347,13 +372,29 @@ async def _process_n8n_response(
     # Проверяем, завершено ли собеседование
     is_done = data.get("done", False)
     stage = data.get("stage", 0)  # текущий этап после сохранения
+    answer_text = data.get("answer", "")  # текст ответа (расшифрованный через Whisper если голос)
+    voice_file_id = data.get("voice_file_id")  # ID голосового файла если был
 
     if is_done:
-        # Финал — показываем результат
-        end_session(telegram_id)
-
+        # Финал — сохраняем последний ответ и завершаем
         result = data.get("result", "")
-        hr_summary = data.get("hr_summary", "")
+        hr_summary = data.get("hr_recommendation", {})
+
+        with get_session() as session:
+            try:
+                # Сохраняем 3-й ответ и завершаем собеседование
+                save_answer_3_and_complete(
+                    session,
+                    telegram_id,
+                    answer=answer_text,
+                    hr_recommendation=hr_summary,
+                    voice_file_id=voice_file_id,
+                )
+            except Exception as e:
+                print(f"Error saving final answer to DB: {e}")
+
+        # Завершаем сессию в любом случае
+        end_session(telegram_id)
 
         await message.answer(
             "✅ <b>Собеседование завершено!</b>\n\n"
@@ -362,9 +403,22 @@ async def _process_n8n_response(
             reply_markup=get_main_keyboard(),
         )
     else:
-        # Следующий вопрос
+        # Следующий вопрос - сохраняем ответ и вопрос
         question = data.get("question", "Продолжайте, пожалуйста.")
         question_num = stage + 1  # stage 0 = вопрос 1, stage 1 = вопрос 2, stage 2 = вопрос 3
+
+        # Сохраняем в БД в зависимости от этапа
+        with get_session() as session:
+            try:
+                # ВАЖНО: Мы ориентируемся на ответ n8n, а не на базу, чтобы избежать гонки
+                if stage == 1:
+                    # n8n перевел нас на 1 этап -> значит мы сохраняем ответ на 1 вопрос
+                    save_answer_1(session, telegram_id, answer_text, question, voice_file_id)
+                elif stage == 2:
+                    # n8n перевел нас на 2 этап -> значит мы сохраняем ответ на 2 вопрос
+                    save_answer_2(session, telegram_id, answer_text, question, voice_file_id)
+            except Exception as e:
+                print(f"Error saving answer to DB: {e}")
 
         await message.answer(
             f"<b>Вопрос {question_num} из 3:</b>\n{question}\n\n"

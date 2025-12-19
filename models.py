@@ -10,6 +10,7 @@ from sqlalchemy import (
     Text,
     SmallInteger,
     ForeignKey,
+    String,
     func,
     create_engine,
     select,
@@ -54,6 +55,17 @@ class User(Base):
     def __repr__(self) -> str:
         return f"<User id={self.id} telegram_id={self.telegram_id}>"
 
+class CVReview(Base):
+    __tablename__ = 'cv_reviews'
+
+    id = Column(Integer, primary_key=True)
+    telegram_id = Column(BigInteger, nullable=False)
+    user_name = Column(String, nullable=True)
+    file_id = Column(String, nullable=True)
+    resume_text = Column(Text, nullable=True)
+    ai_feedback = Column(Text, nullable=True)
+    score = Column(Integer, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class InterviewSession(Base):
     """Сессия собеседования на позицию 'Менеджер по продажам'.
@@ -134,7 +146,21 @@ def get_session():
 
 
 # ==================== Функции для пользователей ====================
-
+def save_cv_review(session, telegram_id, user_name, file_id, resume_text, ai_feedback, score=None):
+    """
+    Сохраняет результат проверки резюме в БД.
+    """
+    review = CVReview(
+        telegram_id=telegram_id,
+        user_name=user_name,
+        file_id=file_id,
+        resume_text=resume_text,
+        ai_feedback=ai_feedback,
+        score=score
+    )
+    session.add(review)
+    session.commit()
+    return review
 
 def ensure_user_started(session, telegram_id: int, started_at: datetime | None = None) -> User:
     """Создать пользователя если не существует."""

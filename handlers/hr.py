@@ -56,9 +56,11 @@ def register_handlers(dp):
 
     dp.include_router(router)
     # Регистрируем все HR подобработчики
-    interview.register_handlers(router)
+    # ВАЖНО: cv_scan, quick_search и hr_info должны быть ПЕРЕД interview,
+    # чтобы их специфичные фильтры обрабатывались первыми
     cv_scan.register_handlers(router)
     quick_search.register_handlers(router)
     hr_info.register_handlers(router)
     back_menu.register_handlers(router)
+    interview.register_handlers(router)
 
