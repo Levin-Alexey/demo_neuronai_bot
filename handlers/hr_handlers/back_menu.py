@@ -30,7 +30,7 @@ def get_main_keyboard() -> ReplyKeyboardMarkup:
 async def back_to_menu_handler(message: types.Message):
     """Обработчик для возврата в главное меню"""
     await message.answer(
-        "🏠 Главное меню\n\nВыберите отдел:",
+        "🏠 Выберите отдел, который хотите автоматизировать:",
         reply_markup=get_main_keyboard()
     )
 

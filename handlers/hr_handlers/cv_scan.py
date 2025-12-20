@@ -52,6 +52,7 @@ async def call_cv_scan_n8n(payload: dict[str, Any]) -> dict[str, Any]:
 class CVScanState(StatesGroup):
     """Состояния FSM для загрузки резюме."""
 
+    waiting_for_position = State()
     waiting_for_file = State()
 
 
@@ -83,16 +84,20 @@ def get_hr_keyboard() -> ReplyKeyboardMarkup:
 async def start_cv_scan(message: types.Message, state: FSMContext) -> None:
     """Запуск режима анализа резюме."""
 
-    await state.set_state(CVScanState.waiting_for_file)
+    await state.set_state(CVScanState.waiting_for_position)
     await message.answer(
-        "📄 <b>Режим проверки резюме</b>\n\n"
-        "Пожалуйста, отправьте файл резюме (PDF или DOCX).\n"
-        "Я проанализирую его и дам оценку.",
+        "🕵️‍♂️ <b>Ищете идеального кандидата? Я помогу.</b>\n\n"
+        "Больше не нужно вчитываться в каждое слово. Просто пришлите мне резюме, и я за 10 секунд сделаю выжимку самого главного:\n"
+        "✅ Сильные стороны\n"
+        "⚠️ Риски и минусы\n"
+        "📊 Итоговая оценка совместимости\n\n"
+        "👇 <b>Для старта введите название должности:</b>",
         parse_mode="HTML",
         reply_markup=get_cancel_keyboard(),
     )
 
 
+@router.message(CVScanState.waiting_for_position, F.text == "❌ Отмена")
 @router.message(CVScanState.waiting_for_file, F.text == "❌ Отмена")
 async def cancel_cv_scan(message: types.Message, state: FSMContext) -> None:
     """Отмена загрузки резюме."""
@@ -104,18 +109,47 @@ async def cancel_cv_scan(message: types.Message, state: FSMContext) -> None:
     )
 
 
+@router.message(CVScanState.waiting_for_position)
+async def handle_position(message: types.Message, state: FSMContext) -> None:
+    """Сохраняем позицию и просим файл резюме."""
+
+    position_text = (message.text or "").strip()
+    if not position_text:
+        await message.answer(
+            "⚠️ Напишите, на какую вакансию ищете кандидата."
+        )
+        return
+
+    await state.update_data(position=position_text)
+    await state.set_state(CVScanState.waiting_for_file)
+    await message.answer(
+        "Отлично! Теперь пришлите файл резюме в PDF как документ.",
+        reply_markup=get_cancel_keyboard(),
+    )
+
+
 @router.message(CVScanState.waiting_for_file, F.document)
 async def handle_cv_file(message: types.Message, state: FSMContext) -> None:
     """Обрабатываем загруженный файл и отправляем его в n8n."""
 
+    data = await state.get_data()
+    position_text = (data.get("position") or "").strip()
+    if not position_text:
+        await message.answer(
+            "⚠️ Сначала укажите вакансию, а потом отправьте резюме.",
+            reply_markup=get_cancel_keyboard(),
+        )
+        await state.set_state(CVScanState.waiting_for_position)
+        return
+
     document = message.document
     if not document:
-        await message.answer("⚠️ Пожалуйста, пришлите файл в формате PDF или Word (DOCX).")
+        await message.answer("⚠️ Пожалуйста, пришлите файл в формате PDF.")
         return
 
     file_name = (document.file_name or "").lower()
     if not (file_name.endswith(".pdf") or file_name.endswith(".doc") or file_name.endswith(".docx")):
-        await message.answer("⚠️ Пожалуйста, пришлите файл в формате PDF или Word (DOCX).")
+        await message.answer("⚠️ Пожалуйста, пришлите файл в формате PDF.")
         return
 
     await message.answer(
@@ -132,6 +166,7 @@ async def handle_cv_file(message: types.Message, state: FSMContext) -> None:
                 "action": "cv_scan",
                 "telegram_id": message.from_user.id,
                 "user_name": message.from_user.full_name or "",
+                "position_text": position_text,
                 "file_id": document.file_id,
                 "file_name": document.file_name or "",
                 "mime_type": document.mime_type or "",
@@ -154,7 +189,7 @@ async def warning_not_file(message: types.Message) -> None:
     """Подсказываем, что нужен файл, если пользователь отправил что-то другое."""
 
     await message.answer(
-        "Пожалуйста, прикрепите именно <b>файл</b> (как документ), а не картинку или текст.",
+        "Пожалуйста, прикрепите <b>файл</b> в формате PDF как документ.",
         parse_mode="HTML",
     )
 
