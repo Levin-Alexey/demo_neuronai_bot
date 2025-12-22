@@ -3,12 +3,15 @@
 import os
 from aiogram import types, F, Router
 from aiogram.types import FSInputFile, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.fsm.context import FSMContext
+
+from states import BotStates
 
 router = Router()
 
 
 @router.message(F.text == "🤝 HR и найм")
-async def hr_handler(message: types.Message):
+async def hr_handler(message: types.Message, state: FSMContext):
     """Обработчик кнопки HR и Найм"""
     # Отправляем видео-кружочек (Video Note)
     video_path = "src/1218.mp4"
@@ -48,6 +51,9 @@ async def hr_handler(message: types.Message):
     )
 
     await message.answer(hr_text, parse_mode="HTML", reply_markup=hr_keyboard)
+
+    # Устанавливаем состояние HR меню
+    await state.set_state(BotStates.HR_MENU)
 
 
 def register_handlers(dp):

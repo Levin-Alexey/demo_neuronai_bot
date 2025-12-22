@@ -2,6 +2,9 @@
 
 from aiogram import Router, F, types
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.fsm.context import FSMContext
+
+from states import BotStates
 
 router = Router()
 
@@ -18,7 +21,10 @@ def _main_menu_keyboard() -> ReplyKeyboardMarkup:
 
 
 @router.message(F.text == "🔙 Назад")
-async def back_to_main_menu(message: types.Message):
+async def back_to_main_menu(message: types.Message, state: FSMContext):
+    # Устанавливаем состояние главного меню
+    await state.set_state(BotStates.MAIN_MENU)
+
     await message.answer(
         "Возвращаю в главное меню. Выберите отдел:",
         reply_markup=_main_menu_keyboard(),

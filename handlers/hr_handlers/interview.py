@@ -16,6 +16,10 @@ from typing import Any
 import httpx
 from aiogram import F, Router, types
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.filters import StateFilter
+from aiogram.fsm.context import FSMContext
+
+from states import BotStates
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +172,7 @@ def get_main_keyboard() -> ReplyKeyboardMarkup:
 # ==================== Обработчики ====================
 
 @router.message(F.text == "🎭 Пройти собеседование")
-async def handle_start_interview(message: types.Message) -> None:
+async def handle_start_interview(message: types.Message, state: FSMContext) -> None:
     """Запуск собеседования."""
     user = message.from_user
     if not user:
@@ -176,8 +180,9 @@ async def handle_start_interview(message: types.Message) -> None:
 
     telegram_id = user.id
 
-    # Если уже в процессе — напоминаем
-    if is_in_interview(telegram_id):
+    # Проверяем текущее состояние
+    current_state = await state.get_state()
+    if current_state == BotStates.INTERVIEW:
         await message.answer(
             "⚠️ У вас уже идёт собеседование.\n"
             "Ответьте на вопрос или нажмите «❌ Отменить собеседование»."
@@ -234,6 +239,9 @@ async def handle_start_interview(message: types.Message) -> None:
     question = data.get("question", "Расскажите о себе и вашем опыте в продажах.")
     start_session(telegram_id, question)
 
+    # Устанавливаем состояние собеседования
+    await state.set_state(BotStates.INTERVIEW)
+
     await message.answer(
         "🎤 <b>Собеседование на позицию «Менеджер по продажам»</b>\n\n"
         f"<b>Вопрос 1 из 3:</b>\n{question}\n\n"
@@ -244,7 +252,7 @@ async def handle_start_interview(message: types.Message) -> None:
 
 
 @router.message(F.text == "❌ Отменить собеседование")
-async def handle_cancel_interview(message: types.Message) -> None:
+async def handle_cancel_interview(message: types.Message, state: FSMContext) -> None:
     """Отмена собеседования."""
     user = message.from_user
     if not user:
@@ -252,7 +260,9 @@ async def handle_cancel_interview(message: types.Message) -> None:
 
     telegram_id = user.id
 
-    if not is_in_interview(telegram_id):
+    # Проверяем состояние
+    current_state = await state.get_state()
+    if current_state != BotStates.INTERVIEW:
         await message.answer("У вас нет активного собеседования.")
         return
 
@@ -264,6 +274,9 @@ async def handle_cancel_interview(message: types.Message) -> None:
 
     end_session(telegram_id)
 
+    # Возвращаемся в состояние HR меню
+    await state.set_state(BotStates.HR_MENU)
+
     await message.answer(
         "🚫 Собеседование отменено.\n"
         "Вы можете начать заново в любое время.",
@@ -271,18 +284,14 @@ async def handle_cancel_interview(message: types.Message) -> None:
     )
 
 
-@router.message(F.voice)
-async def handle_voice_answer(message: types.Message) -> None:
+@router.message(StateFilter(BotStates.INTERVIEW), F.voice)
+async def handle_voice_answer(message: types.Message, state: FSMContext) -> None:
     """Голосовой ответ на вопрос собеседования."""
     user = message.from_user
     if not user:
         return
 
     telegram_id = user.id
-
-    # Проверяем, что пользователь в режиме собеседования
-    if not is_in_interview(telegram_id):
-        return  # Игнорируем голосовые вне собеседования
 
     voice = message.voice
     if not voice:
@@ -308,11 +317,11 @@ async def handle_voice_answer(message: types.Message) -> None:
         pass
 
     # Обрабатываем ответ
-    await _process_n8n_response(message, telegram_id, data)
+    await _process_n8n_response(message, telegram_id, data, state)
 
 
-@router.message(F.text)
-async def handle_text_answer(message: types.Message) -> None:
+@router.message(StateFilter(BotStates.INTERVIEW), F.text)
+async def handle_text_answer(message: types.Message, state: FSMContext) -> None:
     """Текстовый ответ на вопрос собеседования."""
     user = message.from_user
     if not user:
@@ -320,28 +329,6 @@ async def handle_text_answer(message: types.Message) -> None:
 
     telegram_id = user.id
     text = (message.text or "").strip()
-
-    # Не отправляем в n8n кнопки меню
-    menu_buttons = {
-        "📄 Анализ резюме (CV Scan)",
-        "🔥 Быстрый подбор",
-        "⚙️ Информация для HR",
-        "🔙 Назад в меню",
-        "🤝 HR и найм",
-        "👷‍♂️ Охрана труда",
-        "🛠 IT HelpDesk",
-        "🧠 База Знаний",
-        "💰 AI-Менеджер",
-        "🎭 Пройти собеседование",
-        "❌ Отмена",
-        "◀️ Назад",
-    }
-    if text in menu_buttons:
-        return
-
-    # Проверяем, что пользователь в режиме собеседования
-    if not is_in_interview(telegram_id):
-        return  # Игнорируем текст вне собеседования
 
     # Игнорируем пустые и служебные сообщения
     if not text or text.startswith("/"):
@@ -366,13 +353,14 @@ async def handle_text_answer(message: types.Message) -> None:
         pass
 
     # Обрабатываем ответ
-    await _process_n8n_response(message, telegram_id, data)
+    await _process_n8n_response(message, telegram_id, data, state)
 
 
 async def _process_n8n_response(
     message: types.Message,
     telegram_id: int,
     data: dict[str, Any],
+    state: FSMContext,
 ) -> None:
     """Обработка ответа от n8n после ответа кандидата."""
 
@@ -392,21 +380,24 @@ async def _process_n8n_response(
         result = data.get("result", "")
         hr_summary = data.get("hr_recommendation", {})
 
-        with get_session() as session:
-            try:
-                # Сохраняем 3-й ответ и завершаем собеседование
-                save_answer_3_and_complete(
-                    session,
-                    telegram_id,
-                    answer=answer_text,
-                    hr_recommendation=hr_summary,
-                    voice_file_id=voice_file_id,
-                )
-            except Exception as e:
-                print(f"Error saving final answer to DB: {e}")
+        #with get_session() as session:
+        #    try:
+        #        # Сохраняем 3-й ответ и завершаем собеседование
+        #        save_answer_3_and_complete(
+        #            session,
+        #            telegram_id,
+        #            answer=answer_text,
+        #            hr_recommendation=hr_summary,
+        #            voice_file_id=voice_file_id,
+        #        )
+        #    except Exception as e:
+        #        print(f"Error saving final answer to DB: {e}")
 
         # Завершаем сессию в любом случае
         end_session(telegram_id)
+
+        # Возвращаемся в состояние HR меню
+        await state.set_state(BotStates.HR_MENU)
 
         await message.answer(
             "✅ <b>Собеседование завершено!</b>\n\n"
@@ -420,17 +411,17 @@ async def _process_n8n_response(
         question_num = stage + 1  # stage 0 = вопрос 1, stage 1 = вопрос 2, stage 2 = вопрос 3
 
         # Сохраняем в БД в зависимости от этапа
-        with get_session() as session:
-            try:
-                # ВАЖНО: Мы ориентируемся на ответ n8n, а не на базу, чтобы избежать гонки
-                if stage == 1:
-                    # n8n перевел нас на 1 этап -> значит мы сохраняем ответ на 1 вопрос
-                    save_answer_1(session, telegram_id, answer_text, question, voice_file_id)
-                elif stage == 2:
-                    # n8n перевел нас на 2 этап -> значит мы сохраняем ответ на 2 вопрос
-                    save_answer_2(session, telegram_id, answer_text, question, voice_file_id)
-            except Exception as e:
-                print(f"Error saving answer to DB: {e}")
+        #with get_session() as session:
+        #    try:
+        #        # ВАЖНО: Мы ориентируемся на ответ n8n, а не на базу, чтобы #избежать гонки
+        #        if stage == 1:
+        #            # n8n перевел нас на 1 этап -> значит мы сохраняем ответ #на 1 вопрос
+        #            save_answer_1(session, telegram_id, answer_text, #question, voice_file_id)
+        #        elif stage == 2:
+        #            # n8n перевел нас на 2 этап -> значит мы сохраняем ответ #на 2 вопрос
+        #            save_answer_2(session, telegram_id, answer_text, #question, voice_file_id)
+        #    except Exception as e:
+        #        print(f"Error saving answer to DB: {e}")
 
         await message.answer(
             f"<b>Вопрос {question_num} из 3:</b>\n{question}\n\n"

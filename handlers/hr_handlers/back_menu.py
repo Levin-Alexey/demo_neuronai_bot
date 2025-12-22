@@ -2,6 +2,9 @@
 
 from aiogram import types, F, Router
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.fsm.context import FSMContext
+
+from states import BotStates
 
 router = Router()
 
@@ -27,8 +30,33 @@ def get_main_keyboard() -> ReplyKeyboardMarkup:
 
 
 @router.message(F.text == "🔙 Назад в меню")
-async def back_to_menu_handler(message: types.Message):
+async def back_to_menu_handler(message: types.Message, state: FSMContext):
     """Обработчик для возврата в главное меню"""
+    user = message.from_user
+    if not user:
+        return
+
+    telegram_id = user.id
+
+    # Проверяем, не в собеседовании ли пользователь
+    current_state = await state.get_state()
+    if current_state == BotStates.INTERVIEW:
+        try:
+            from handlers.hr_handlers.interview import end_session, call_n8n
+
+            # Уведомляем n8n о завершении
+            await call_n8n({
+                "action": "cancel",
+                "telegram_id": telegram_id,
+            })
+            # Завершаем сессию
+            end_session(telegram_id)
+        except Exception as e:
+            print(f"Error ending interview session: {e}")
+
+    # Устанавливаем состояние главного меню
+    await state.set_state(BotStates.MAIN_MENU)
+
     await message.answer(
         "🏠 Выберите отдел, который хотите автоматизировать:",
         reply_markup=get_main_keyboard()
@@ -36,7 +64,7 @@ async def back_to_menu_handler(message: types.Message):
 
 
 @router.message(F.text == "◀️ Назад")
-async def back_button_handler(message: types.Message):
+async def back_button_handler(message: types.Message, state: FSMContext):
     """Обработчик кнопки ◀️ Назад - возврат в меню HR"""
     user = message.from_user
     if not user:
@@ -45,10 +73,11 @@ async def back_button_handler(message: types.Message):
     telegram_id = user.id
 
     # Проверяем, не в собеседовании ли пользователь
-    try:
-        from handlers.hr_handlers.interview import is_in_interview, end_session, call_n8n
+    current_state = await state.get_state()
+    if current_state == BotStates.INTERVIEW:
+        try:
+            from handlers.hr_handlers.interview import end_session, call_n8n
 
-        if is_in_interview(telegram_id):
             # Уведомляем n8n о завершении
             await call_n8n({
                 "action": "cancel",
@@ -56,8 +85,8 @@ async def back_button_handler(message: types.Message):
             })
             # Завершаем сессию
             end_session(telegram_id)
-    except Exception as e:
-        print(f"Error ending interview session: {e}")
+        except Exception as e:
+            print(f"Error ending interview session: {e}")
 
     # Возвращаем в меню HR
     hr_keyboard = ReplyKeyboardMarkup(
@@ -78,6 +107,9 @@ async def back_button_handler(message: types.Message):
 👇 Что запустим?"""
 
     await message.answer(hr_text, reply_markup=hr_keyboard)
+
+    # Устанавливаем состояние HR меню
+    await state.set_state(BotStates.HR_MENU)
 
 
 def register_handlers(main_router):

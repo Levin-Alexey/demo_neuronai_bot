@@ -2,16 +2,22 @@ import asyncio
 import os
 from datetime import timezone
 from dotenv import load_dotenv
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, FSInputFile
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.context import FSMContext
 
 # Загружаем переменные окружения из .env
 load_dotenv()
 TOKEN = os.getenv('BOT_TOKEN')
 
+# Импортируем состояния
+from states import BotStates
+
 bot = Bot(token=TOKEN)
-dp = Dispatcher()
+storage = MemoryStorage()
+dp = Dispatcher(storage=storage)
 
 # Импорт моделей/БД утилит
 from models import init_db, get_session, ensure_user_started
@@ -20,7 +26,7 @@ from handlers import hr, labor_safety, it_helpdesk, knowledge_base, ai_manager
 
 
 @dp.message(Command('start'))
-async def cmd_start(message: types.Message):
+async def cmd_start(message: types.Message, state: FSMContext):
     # Фиксируем старт пользователя в БД (идемпотентно)
     try:
         # Время запуска из Telegram (UTC). Делаем datetime timezone-aware при необходимости
@@ -83,6 +89,9 @@ async def cmd_start(message: types.Message):
 Нажмите на кнопку ниже, чтобы активировать нужного сотрудника ⤵️"""
 
     await message.answer(instruction_text, parse_mode="HTML", reply_markup=keyboard)
+
+    # Устанавливаем состояние главного меню
+    await state.set_state(BotStates.MAIN_MENU)
 
 
 async def main():
