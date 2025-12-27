@@ -25,6 +25,10 @@ class BotStates(StatesGroup):
 
     # Охрана труда
     LABOR_SAFETY_MENU = State()
+    PHOTO_CONTROL = State()  # Фото-контроль для получения допуска
+    WORK_PERMIT = State()  # Оформление работ
+    REPORT_VIOLATION = State()  # Сообщение о нарушении
+    BOT_INSTRUCTOR = State()  # Бот-инструктор
 
     # База знаний
     KNOWLEDGE_BASE_MENU = State()
