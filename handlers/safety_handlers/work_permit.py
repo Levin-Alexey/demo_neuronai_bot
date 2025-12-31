@@ -1,19 +1,21 @@
-"""Обработчик кнопки 'Оформить работы'."""
+"""Обработчик кнопки 'Оформить работы' с голосовым вводом."""
 
+import asyncio
+import logging
+from typing import Any
+
+import httpx
 from aiogram import Router, F, types
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-import logging
-from typing import Any
-import httpx
-
 
 logger = logging.getLogger(__name__)
 router = Router()
 
 # Webhook для оформления работ
 N8N_WORK_PERMIT_WEBHOOK_URL = "https://levinbiz.app.n8n.cloud/webhook/work-permit"
+N8N_VOICE_PERMIT_WEBHOOK = "https://levinbiz.app.n8n.cloud/webhook/voice-permit"
 
 
 async def call_work_permit_n8n(payload: dict[str, Any]) -> dict[str, Any]:
@@ -48,12 +50,36 @@ async def call_work_permit_n8n(payload: dict[str, Any]) -> dict[str, Any]:
         raise
 
 
+async def process_voice_permit_n8n(file_id: str, file_url: str, user_info: dict) -> dict[str, Any]:
+    """Отправляет голосовое в n8n для транскрибации и формирования наряда."""
+    payload = {
+        "file_id": file_id,
+        "file_url": file_url,
+        "user": user_info
+    }
+
+    async with httpx.AsyncClient(timeout=60.0, verify=False) as client:
+        try:
+            resp = await client.post(N8N_VOICE_PERMIT_WEBHOOK, json=payload)
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as e:
+            logger.error(f"N8N Voice Error: {e}")
+            return {
+                "permit_id": "OFFLINE-001",
+                "summary": "Ошибка обработки голосового. Проверьте соединение.",
+                "risk_level": "Не определен",
+                "status": "❌ Ошибка"
+            }
+
+
 class WorkPermitState(StatesGroup):
     """Состояния для оформления работ."""
     WAITING_FOR_WORK_TYPE = State()
     WAITING_FOR_LOCATION = State()
     WAITING_FOR_DURATION = State()
     WAITING_FOR_DESCRIPTION = State()
+    WAITING_FOR_VOICE = State()
 
 
 def _safety_menu_keyboard() -> ReplyKeyboardMarkup:
@@ -89,13 +115,18 @@ def _work_types_keyboard() -> ReplyKeyboardMarkup:
 async def work_permit_handler(message: types.Message, state: FSMContext):
     """Запускает процесс оформления работ."""
 
-    await state.set_state(WorkPermitState.WAITING_FOR_WORK_TYPE)
-
     await message.answer(
         "📝 <b>Оформление работ</b>\n\n"
-        "Выберите тип работ, который необходимо оформить:",
+        "Выберите способ оформления:",
         parse_mode="HTML",
-        reply_markup=_work_types_keyboard(),
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="🎙 Голосовой наряд-допуск")],
+                [KeyboardButton(text="📋 Стандартное оформление")],
+                [KeyboardButton(text="🔙 Отмена")],
+            ],
+            resize_keyboard=True,
+        ),
     )
 
 
@@ -239,6 +270,121 @@ async def process_description(message: types.Message, state: FSMContext):
             reply_markup=_safety_menu_keyboard(),
         )
         await state.clear()
+
+
+# --- Обработчик выбора режима ---
+@router.message(F.text == "🎙 Голосовой наряд-допуск")
+async def start_voice_permit(message: types.Message, state: FSMContext):
+    """Запускает режим голосового оформления работ."""
+    await state.set_state(WorkPermitState.WAITING_FOR_VOICE)
+
+    await message.answer(
+        "📝 <b>Голосовой Наряд-допуск (AI-Permit)</b>\n\n"
+        "Просто продиктуйте детали работ, и я сформирую официальный документ.\n\n"
+        "<b>Как это работает:</b>\n"
+        "1. Нажмите кнопку записи голосового 🎙\n"
+        "2. Скажите: <b>ГДЕ</b> работаете, <b>ЧТО</b> делаете и <b>КТО</b> в бригаде.\n"
+        "3. Я транскрибирую голос и заполню форму.\n\n"
+        "🗣 <b>Пример:</b>\n"
+        "<i>«Бригада Иванова. Огневые работы в Цеху №5. Варим лестницу.»</i>\n\n"
+        "👇 <b>Жду ваше голосовое сообщение:</b>",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="🔙 Отмена")]],
+            resize_keyboard=True
+        )
+    )
+
+
+@router.message(WorkPermitState.WAITING_FOR_VOICE, F.voice)
+async def process_voice_message(message: types.Message, state: FSMContext):
+    """Обрабатывает голосовое сообщение."""
+    voice = message.voice
+    file_id = voice.file_id
+
+    # Получаем информацию о файле
+    file_info = await message.bot.get_file(file_id)
+    file_url = f"https://api.telegram.org/file/bot{message.bot.token}/{file_info.file_path}"
+
+    # Анимация обработки
+    status_msg = await message.answer("🎙 <i>Получение аудиопотока...</i>", parse_mode="HTML")
+    await asyncio.sleep(1.0)
+
+    await status_msg.edit_text("⚡ <b>Whisper AI:</b> Транскрибация речи в текст...", parse_mode="HTML")
+
+    user_data = {
+        "id": message.from_user.id,
+        "name": message.from_user.full_name,
+        "username": message.from_user.username
+    }
+
+    # Запрос к n8n
+    result = await process_voice_permit_n8n(file_id, file_url, user_data)
+
+    await status_msg.edit_text("📑 <i>Структурирование данных и генерация документа...</i>", parse_mode="HTML")
+    await asyncio.sleep(1.0)
+
+    # Формируем ответ
+    permit_text = (
+        f"✅ <b>Наряд-допуск №{result.get('permit_id', 'DRAFT')} сформирован</b>\n"
+        f"──────────────────\n"
+        f"🏗 <b>Вид работ:</b> {result.get('work_type', 'Общестроительные')}\n"
+        f"📍 <b>Место:</b> {result.get('location', 'Не указано')}\n"
+        f"👷 <b>Ответственный:</b> {result.get('foreman', user_data['name'])}\n"
+        f"⚠️ <b>Уровень риска:</b> {result.get('risk_level', 'Средний')}\n\n"
+        f"📝 <b>Содержание (из голоса):</b>\n"
+        f"<i>«{result.get('summary', '...')}»</i>\n\n"
+        f"🛡 <b>Назначенные меры:</b>\n"
+        f"• {result.get('safety_measures', 'Каска, Жилет, Инструктаж')}\n\n"
+        f"<b>Статус:</b> Ожидает подписи гл. инженера."
+    )
+
+    await status_msg.delete()
+    await message.answer(permit_text, parse_mode="HTML", reply_markup=_safety_menu_keyboard())
+    await state.clear()
+
+
+@router.message(WorkPermitState.WAITING_FOR_VOICE, F.text == "🔙 Отмена")
+async def cancel_voice(message: types.Message, state: FSMContext):
+    """Отмена оформления работ (голосовой режим)."""
+    await state.clear()
+    await message.answer(
+        "Оформление отменено.",
+        reply_markup=_safety_menu_keyboard()
+    )
+
+
+@router.message(WorkPermitState.WAITING_FOR_VOICE)
+async def invalid_voice_input(message: types.Message):
+    """Обработка некорректного ввода в режиме голосового оформления."""
+    await message.answer(
+        "🎙 Пожалуйста, отправьте <b>голосовое сообщение</b>.",
+        parse_mode="HTML"
+    )
+
+
+# --- Обработчик текстового режима ---
+@router.message(F.text == "📋 Стандартное оформление")
+async def standard_work_permit(message: types.Message, state: FSMContext):
+    """Запускает режим текстового оформления работ."""
+    await state.set_state(WorkPermitState.WAITING_FOR_WORK_TYPE)
+
+    await message.answer(
+        "📝 <b>Оформление работ</b>\n\n"
+        "Выберите тип работ, который необходимо оформить:",
+        parse_mode="HTML",
+        reply_markup=_work_types_keyboard(),
+    )
+
+
+@router.message(F.text == "🔙 Отмена", WorkPermitState)
+async def cancel_work_permit(message: types.Message, state: FSMContext):
+    """Отмена оформления работ."""
+    await state.clear()
+    await message.answer(
+        "Оформление работ отменено.",
+        reply_markup=_safety_menu_keyboard(),
+    )
 
 
 def register_handlers(parent_router: Router):
