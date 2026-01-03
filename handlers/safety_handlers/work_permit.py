@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 # Webhook для оформления работ
-N8N_WORK_PERMIT_WEBHOOK_URL = "https://levinbiz.app.n8n.cloud/webhook-test/work-permit"
-N8N_VOICE_PERMIT_WEBHOOK = "https://levinbiz.app.n8n.cloud/webhook-test/voice-permit"
+N8N_WORK_PERMIT_WEBHOOK_URL = "https://levinbiz.app.n8n.cloud/webhook/work-permit"
+N8N_VOICE_PERMIT_WEBHOOK = "https://levinbiz.app.n8n.cloud/webhook/voice-permit"
 
 
 async def call_work_permit_n8n(payload: dict[str, Any]) -> dict[str, Any]:
