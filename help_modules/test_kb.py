@@ -4,7 +4,7 @@ from langchain_pinecone import PineconeVectorStore
 
 # --- КОНФИГУРАЦИЯ ---
 load_dotenv()  # Загружаем переменные из .env файла
-INDEX_NAME = "hse-rules"
+INDEX_NAME = "company-kb"
 
 
 def test_search():
@@ -20,7 +20,7 @@ def test_search():
     )
 
     # 3. Задаем вопрос (которого нет в тексте дословно, но есть по смыслу)
-    query = "Можно ли работать на стремянке без страховки?"
+    query = "Расскажи про отпуск в компании"
     print(f"❓ Вопрос: {query}")
 
     # 4. Ищем 2 самых похожих куска

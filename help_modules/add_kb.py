@@ -10,10 +10,10 @@ from pinecone import Pinecone, ServerlessSpec
 # --- КОНФИГУРАЦИЯ ---
 load_dotenv()  # Загружаем переменные из .env файла
 
-INDEX_NAME = "hse-rules"
+INDEX_NAME = "company-kb"
 # Получаем абсолютный путь к файлу относительно корня проекта
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FILE_PATH = os.path.join(BASE_DIR, "src", "kb.docx")  # Теперь можно указывать и .docx, и .pdf
+FILE_PATH = os.path.join(BASE_DIR, "src", "corp_RAG.docx")  # Теперь можно указывать и .docx, и .pdf
 
 
 def get_loader_by_extension(file_path):
