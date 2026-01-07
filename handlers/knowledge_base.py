@@ -14,7 +14,7 @@ router = Router()
 async def knowledge_base_handler(message: types.Message, state: FSMContext):
     """Обработчик кнопки База Знаний"""
     # Отправляем видео-кружочек (Video Note)
-    video_path = "src/202601.mp4"
+    video_path = "src/2026_1.mp4"
     if os.path.exists(video_path):
         video = FSInputFile(video_path)
         await message.answer_video_note(video)
