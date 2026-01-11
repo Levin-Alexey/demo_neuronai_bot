@@ -67,9 +67,9 @@ async def start_sales(message: types.Message, state: FSMContext):
     await state.set_state(SalesState.waiting_for_niche)
     await message.answer(
         "💼 <b>AI-Калькулятор стоимости</b>\n\n"
-        "Я обучен на актуальных прайс-листах нашей студии.\n"
+        "Я обучена на актуальных прайс-листах нашей студии Neuron_AI.\n"
         "Ответьте на 4 вопроса, и я сформирую персональное предложение, а также уведомлю руководителя.\n\n"
-        "1️⃣ <b>Какая у вас сфера бизнеса?</b>",
+        "1️⃣ <b>Какая у Вас сфера бизнеса?</b>",
         parse_mode="HTML",
         reply_markup=_cancel_kb()
     )
@@ -80,8 +80,8 @@ async def step_niche(message: types.Message, state: FSMContext):
     await state.update_data(niche=message.text)
     await state.set_state(SalesState.waiting_for_task)
     await message.answer(
-        "2️⃣ <b>Опишите задачу своими словами.</b>\n"
-        "Например: <i>'Хочу бота, который отвечает на вопросы по PDF и записывает на прием'</i>",
+        "2️⃣ Опишите задачу своими словами.\n"
+        "Например: 'Хочу бота, который отвечает на вопросы по PDF и записывает на прием'",
         parse_mode="HTML",
         reply_markup=_cancel_kb()
     )
@@ -100,7 +100,7 @@ async def step_task(message: types.Message, state: FSMContext):
             [KeyboardButton(text="❌ Отмена")]
         ], resize_keyboard=True
     )
-    await message.answer("3️⃣ <b>На какой бюджет вы ориентируетесь?</b>", reply_markup=kb)
+    await message.answer("3️⃣ На какой бюджет Вы ориентируетесь?", reply_markup=kb)
 
 # --- 4. Бюджет -> Контакт ---
 @router.message(SalesState.waiting_for_budget, F.text != "❌ Отмена")
@@ -109,7 +109,7 @@ async def step_budget(message: types.Message, state: FSMContext):
     await state.set_state(SalesState.waiting_for_contact)
 
     await message.answer(
-        "4️⃣ <b>Как с вами связаться?</b>\n"
+        "4️⃣ Как с Вами связаться?\n"
         "Напишите телефон или @username (или нажмите кнопку ниже).",
         reply_markup=ReplyKeyboardMarkup(
             keyboard=[
@@ -134,7 +134,7 @@ async def process_sales_final(message: types.Message, state: FSMContext, contact
     data = await state.get_data()
 
     # Анимация "печатает" (пока n8n думает)
-    msg = await message.answer("⏳ <b>AI анализирует задачу и считает смету...</b>", parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
+    msg = await message.answer("⏳ AI анализирует задачу и считает смету...", parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
     await message.bot.send_chat_action(chat_id=message.chat.id, action="typing")
 
     try:
@@ -157,8 +157,8 @@ async def process_sales_final(message: types.Message, state: FSMContext, contact
                 # Удаляем сообщение "анализирую" и шлем результат
                 await msg.delete()
                 await message.answer(
-                    f"📝 <b>Ваше предварительное КП:</b>\n\n{answer}\n\n"
-                    f"✅ <i>Ваш запрос и контакты уже переданы руководителю проекта.</i>",
+                    f"📝 Ваше предварительное КП:\n\n{answer}\n\n"
+                    f"✅ Ваш запрос и контакты уже переданы руководителю проекта.",
                     parse_mode="Markdown" # GPT любит markdown (**bold**)
                 )
             else:
@@ -208,8 +208,8 @@ async def start_manager_contact(message: types.Message, state: FSMContext):
 
     await message.answer(
         "📞 <b>Связь с менеджером</b>\n\n"
-        "Напишите ваше сообщение. Вы можете отправить текст, файл или фото.\n"
-        "Менеджер ответит вам в ближайшее время.",
+        "Напишите Ваше сообщение. Вы можете отправить текст, файл или фото.\n"
+        "Менеджер ответит Вам в ближайшее время.",
         parse_mode="HTML",
         reply_markup=kb
     )
