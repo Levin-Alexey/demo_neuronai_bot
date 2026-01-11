@@ -3,10 +3,11 @@
 Production-версия: Сбор данных -> RAG (Прайс) -> КП -> Email админу.
 """
 
+import os
 from aiogram import Router, F, types
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, FSInputFile
 import httpx
 import logging
 from aiogram.filters import Command
@@ -42,6 +43,14 @@ def _cancel_kb() -> ReplyKeyboardMarkup:
 async def ai_manager_main_menu(message: types.Message, state: FSMContext):
     """Обработчик кнопки AI-Менеджер из главного меню"""
     await state.set_state(BotStates.AI_MANAGER_MENU)
+
+    # Отправляем видео-кружочек (Video Note)
+    video_path = "src/20260112.mp4"
+    if os.path.exists(video_path):
+        video = FSInputFile(video_path)
+        await message.answer_video_note(video)
+    else:
+        await message.answer("Видео не найдено")
 
     manager_text = """💠 <b>AI Менеджер по продажам</b>
 
