@@ -35,3 +35,4 @@ class BotStates(StatesGroup):
 
     # AI-Менеджер
     AI_MANAGER_MENU = State()
+    MANAGER_CONTACT = State()  # Состояние ожидания сообщения для менеджера

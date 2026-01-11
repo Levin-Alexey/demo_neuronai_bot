@@ -22,7 +22,7 @@ def _company_menu_keyboard() -> ReplyKeyboardMarkup:
         keyboard=[
             [KeyboardButton(text="🌴 Оформление отпуска"), KeyboardButton(text="💰 Дни выплаты зарплаты")],
             [KeyboardButton(text="🤒 Больничный лист"), KeyboardButton(text="🏥 ДМС и страховка")],
-            [KeyboardButton(text="🏠 Удаленная работа"), KeyboardButton(text="🔙 Назад")],
+            [KeyboardButton(text="🔙 Назад")],
         ],
         resize_keyboard=True,
         input_field_placeholder="Спросите о жизни компании..."
