@@ -57,9 +57,6 @@ async def cmd_start(message: types.Message, state: FSMContext):
             ],
             [
                 KeyboardButton(text="💰 AI-Менеджер"),
-            ],
-            [
-                KeyboardButton(text="👤 Связаться с менеджером"),
             ]
         ],
         resize_keyboard=True

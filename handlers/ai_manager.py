@@ -11,6 +11,8 @@ import httpx
 import logging
 from aiogram.filters import Command
 
+from states import BotStates
+
 logger = logging.getLogger(__name__)
 router = Router()
 
@@ -34,6 +36,30 @@ def _cancel_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="❌ Отмена")]], resize_keyboard=True
     )
+
+# --- ГЛАВНОЕ МЕНЮ AI-МЕНЕДЖЕРА ---
+@router.message(F.text == "💰 AI-Менеджер")
+async def ai_manager_main_menu(message: types.Message, state: FSMContext):
+    """Обработчик кнопки AI-Менеджер из главного меню"""
+    await state.set_state(BotStates.AI_MANAGER_MENU)
+
+    manager_text = """💰 <b>AI-Менеджер</b>
+
+Добро пожаловать в отдел продаж будущего.
+
+Мой AI рассчитает смету вашего проекта на основе актуальных прайс-листов.
+
+Что хотите сделать?"""
+
+    manager_keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="💰 Расчет стоимости")],
+            [KeyboardButton(text="🔙 Назад в меню")]
+        ],
+        resize_keyboard=True
+    )
+
+    await message.answer(manager_text, parse_mode="HTML", reply_markup=manager_keyboard)
 
 # --- 1. Старт опроса ---
 @router.message(F.text == "💰 Расчет стоимости")
@@ -150,6 +176,14 @@ async def process_sales_final(message: types.Message, state: FSMContext, contact
 async def cancel_handler(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer("Расчет отменен.", reply_markup=types.ReplyKeyboardRemove())
+
+@router.message(F.text == "🔙 Назад в меню")
+async def back_to_main_menu(message: types.Message, state: FSMContext):
+    """Возврат в главное меню"""
+    await state.clear()
+
+    from main import cmd_start
+    await cmd_start(message, state)
 
 # --- МЕНЕДЖЕР РАЗДЕЛ ---
 
