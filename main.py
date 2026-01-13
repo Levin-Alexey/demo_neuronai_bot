@@ -69,16 +69,6 @@ class AccessCheckMiddleware(BaseMiddleware):
                 
                 if not has_access:
                     # Доступ истек - показываем сообщение
-                    kb = ReplyKeyboardMarkup(
-                        keyboard=[
-                            [KeyboardButton(
-                                text="👤 Связаться с менеджером")],
-                            [KeyboardButton(
-                                text="🔄 Проверить доступ")]
-                        ],
-                        resize_keyboard=True
-                    )
-                    
                     access_until_str = ""
                     if access_until:
                         from datetime import timedelta
@@ -91,16 +81,12 @@ class AccessCheckMiddleware(BaseMiddleware):
                         f"⏰ <b>Доступ к боту истек</b>\n\n"
                         f"Ваш пробный период (24 часа) "
                         f"закончился {access_until_str}.\n\n"
-                        f"🔹 Чтобы продолжить использование бота, "
-                        f"свяжитесь с менеджером\n"
-                        f"🔹 Нажмите кнопку ниже или используйте "
-                        f"команду /manager"
+                        f"📱 Для получения консультации об услугах - напиши мне сообщение: <a href='https://t.me/LevinMSK'>@LevinMSK</a>"
                     )
                     
                     await message.answer(
                         msg,
-                        parse_mode="HTML",
-                        reply_markup=kb
+                        parse_mode="HTML"
                     )
                     return  # Блокируем дальнейшую обработку
         except Exception as e:
