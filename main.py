@@ -59,7 +59,13 @@ class AccessCheckMiddleware(BaseMiddleware):
         # Проверяем доступ
         try:
             with get_session() as session:
-                has_access, access_until = check_user_access(session, telegram_id)
+                has_access, access_until = check_user_access(
+                    session, telegram_id)
+                
+                # DEBUG логирование
+                print(f"[ACCESS CHECK] User {telegram_id}: "
+                      f"has_access={has_access}, "
+                      f"access_until={access_until}")
                 
                 if not has_access:
                     # Доступ истек - показываем сообщение
@@ -98,7 +104,9 @@ class AccessCheckMiddleware(BaseMiddleware):
                     )
                     return  # Блокируем дальнейшую обработку
         except Exception as e:
-            print(f"Access check error: {e}")
+            print(f"❌ Access check error for user {telegram_id}: {e}")
+            import traceback
+            traceback.print_exc()
             # В случае ошибки БД - пропускаем проверку
             pass
         
@@ -249,7 +257,8 @@ async def main():
     except Exception as e:
         print(f"DB init error: {e}")
 
-    # Регистрируем middleware для проверки доступа
+    # Регистрируем middleware ПЕРЕД обработчиками!
+    # (важно для правильной работы проверки доступа)
     dp.message.middleware(AccessCheckMiddleware())
     
     # Регистрируем обработчики кнопок
@@ -259,6 +268,7 @@ async def main():
     knowledge_base.register_handlers(dp)
     ai_manager.register_handlers(dp)
 
+    print("✅ Бот запущен. Middleware для проверки доступа активен.")
     await dp.start_polling(bot)
 
 
