@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 from sqlalchemy import (
@@ -330,3 +330,33 @@ def get_all_completed_interviews(session, limit: int = 50) -> list[InterviewSess
             .limit(limit)
         ).scalars().all()
     )
+
+
+# ==================== Проверка доступа ====================
+
+
+def check_user_access(session, telegram_id: int) -> tuple[bool, datetime | None]:
+    """Проверить, имеет ли пользователь доступ к боту (24 часа с момента started_at).
+    
+    Args:
+        session: SQLAlchemy сессия
+        telegram_id: Telegram ID пользователя
+        
+    Returns:
+        tuple: (имеет_доступ: bool, дата_окончания_доступа: datetime | None)
+    """
+    from datetime import timedelta
+    
+    user = session.execute(
+        select(User).where(User.telegram_id == telegram_id)
+    ).scalar_one_or_none()
+    
+    if not user:
+        return False, None
+    
+    # Доступ на 24 часа с момента started_at
+    access_until = user.started_at + timedelta(hours=24)
+    now = datetime.now(timezone.utc)
+    
+    has_access = now < access_until
+    return has_access, access_until
